@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NewsAI",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Rövid összefoglaló és pontozás hírcikkekhez AI-val (Claude, OpenAI, OpenRouter vagy saját endpoint), még olvasás előtt.",
   "permissions": [
     "storage"

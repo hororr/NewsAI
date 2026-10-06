@@ -33,9 +33,10 @@ export const PROVIDERS = {
   },
   openrouter: {
     label: "OpenRouter (sok modell egy kulccsal)",
-    defaultModel: "openai/gpt-4.1",
+    defaultModel: "openrouter/free",
     defaultBaseUrl: "https://openrouter.ai/api/v1",
     models: [
+      "openrouter/free",
       "openrouter/auto",
       "openai/gpt-4.1", "openai/gpt-4.1-mini", "openai/gpt-4.1-nano",
       "openai/gpt-4o", "openai/gpt-4o-mini",
@@ -111,8 +112,14 @@ export function activeProvider(settings) {
     model: settings[`${id}Model`].trim() || PROVIDERS[id].defaultModel,
     baseUrl: (settings[`${id}BaseUrl`].trim() || (id === "openrouter" ? PROVIDERS.openrouter.defaultBaseUrl : "")).replace(/\/+$/, ""),
     apiKey: settings[`${id}Key`].trim(),
-    cheapest: id === "openrouter" && settings.openrouterCheapest,
+    // Free models cost nothing, so price sorting would only narrow the choice.
+    cheapest: id === "openrouter" && settings.openrouterCheapest && !isFreeModel(settings.openrouterModel),
   };
+}
+
+export function isFreeModel(model) {
+  const m = (model || PROVIDERS.openrouter.defaultModel).trim();
+  return m === "openrouter/free" || m.endsWith(":free");
 }
 
 export function siteList(settings) {
