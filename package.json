@@ -1,6 +1,6 @@
 {
   "name": "newsai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Chrome-bővítmény: rövid összefoglaló és pontozás hírcikkekhez a Claude API-val",
   "scripts": {
@@ -10,6 +10,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
     "@mozilla/readability": "^0.6.0",
+    "openai": "^7.28.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

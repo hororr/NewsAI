@@ -1,7 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import * as z from "zod/v4";
-import { getSettings } from "./settings.js";
+import { callModel, friendlyError } from "./providers.js";
+import { activeProvider, getSettings } from "./settings.js";
 
 const ArticleSchema = z.object({
   summary: z.array(z.string()),
@@ -41,36 +40,10 @@ function clamp(n) {
   return Math.min(10, Math.max(1, Math.round(n)));
 }
 
-function requestOptions(model) {
-  // Haiku 4.5 does not take the effort parameter; on the larger models low effort
-  // keeps summaries fast and cheap.
-  return model.startsWith("claude-haiku") ? {} : { effort: "low" };
-}
-
-async function callClaude(settings, { system, user, schema, maxTokens }) {
-  if (!settings.apiKey) {
-    throw new Error("Nincs megadva Anthropic API-kulcs. Add meg a bővítmény beállításaiban.");
-  }
-  const client = new Anthropic({ apiKey: settings.apiKey, dangerouslyAllowBrowser: true });
-  const response = await client.messages.parse({
-    model: settings.model,
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: "user", content: user }],
-    output_config: { format: zodOutputFormat(schema), ...requestOptions(settings.model) },
-  });
-  if (response.stop_reason === "refusal") {
-    throw new Error("A modell ezt a tartalmat nem dolgozta fel.");
-  }
-  if (response.stop_reason === "max_tokens" || !response.parsed_output) {
-    throw new Error("A válasz hiányos lett, próbáld újra.");
-  }
-  return response.parsed_output;
-}
-
 async function summarizeArticle({ url, title, text }) {
   const settings = await getSettings();
-  const cacheKey = `article:${settings.model}:${url}`;
+  const provider = activeProvider(settings);
+  const cacheKey = `article:${provider.id}:${provider.model}:${url}`;
   const cached = await cacheGet(cacheKey);
   if (cached) return cached;
 
@@ -85,7 +58,7 @@ async function summarizeArticle({ url, title, text }) {
     interestsBlock(settings),
   ].join("\n\n");
 
-  const result = await callClaude(settings, {
+  const result = await callModel(provider, {
     system,
     user: `Cím: ${title}\nURL: ${url}\n\nA cikk szövege:\n${body}`,
     schema: ArticleSchema,
@@ -98,10 +71,12 @@ async function summarizeArticle({ url, title, text }) {
 
 async function scoreHeadlines({ items }) {
   const settings = await getSettings();
+  const provider = activeProvider(settings);
+  const cachePrefix = `headline:${provider.id}:${provider.model}:`;
   const results = {};
   const missing = [];
   for (const item of items) {
-    const cached = await cacheGet(`headline:${settings.model}:${item.url}`);
+    const cached = await cacheGet(cachePrefix + item.url);
     if (cached) results[item.url] = cached;
     else missing.push(item);
   }
@@ -119,7 +94,7 @@ async function scoreHeadlines({ items }) {
   for (let i = 0; i < missing.length; i += 40) {
     const chunk = missing.slice(i, i + 40);
     const list = chunk.map((item, idx) => `${idx}: ${item.title}`).join("\n");
-    const output = await callClaude(settings, {
+    const output = await callModel(provider, {
       system,
       user: `Címek:\n${list}`,
       schema: HeadlinesSchema,
@@ -130,7 +105,7 @@ async function scoreHeadlines({ items }) {
       if (!item) continue;
       const value = { score: clamp(entry.score), reason: entry.reason };
       results[item.url] = value;
-      await cacheSet(`headline:${settings.model}:${item.url}`, value);
+      await cacheSet(cachePrefix + item.url, value);
     }
   }
   return results;
@@ -152,16 +127,6 @@ async function pruneCache() {
   if (entries.length <= CACHE_LIMIT) return;
   entries.sort((a, b) => a[1].at - b[1].at);
   await chrome.storage.local.remove(entries.slice(0, entries.length - CACHE_LIMIT).map(([k]) => k));
-}
-
-function friendlyError(error) {
-  if (error instanceof Anthropic.AuthenticationError) return "Érvénytelen API-kulcs. Ellenőrizd a beállításokban.";
-  if (error instanceof Anthropic.PermissionDeniedError) return "Az API-kulcs nem jogosult erre a modellre.";
-  if (error instanceof Anthropic.RateLimitError) return "Túl sok kérés, várj egy kicsit és próbáld újra.";
-  if (error instanceof Anthropic.BadRequestError) return `Hibás kérés: ${error.message}`;
-  if (error instanceof Anthropic.APIConnectionError) return "Nem sikerült elérni a Claude API-t (hálózati hiba).";
-  if (error instanceof Anthropic.APIError) return `API-hiba (${error.status}): ${error.message}`;
-  return error?.message || String(error);
 }
 
 const handlers = {

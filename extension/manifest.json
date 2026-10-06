@@ -1,18 +1,39 @@
 {
   "manifest_version": 3,
   "name": "NewsAI",
-  "version": "0.1.0",
-  "description": "Rövid összefoglaló és pontozás hírcikkekhez a Claude segítségével, még olvasás előtt.",
-  "permissions": ["storage"],
-  "host_permissions": ["https://api.anthropic.com/*"],
-  "background": { "service_worker": "background.js" },
+  "version": "0.2.0",
+  "description": "Rövid összefoglaló és pontozás hírcikkekhez AI-val (Claude, OpenAI vagy saját endpoint), még olvasás előtt.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
-  "action": { "default_title": "NewsAI: összefoglaló erről az oldalról" },
-  "options_ui": { "page": "options.html", "open_in_tab": true }
+  "action": {
+    "default_title": "NewsAI: összefoglaló erről az oldalról"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ]
 }

@@ -11,7 +11,7 @@
     p.lead { color: var(--muted); margin-top: 0; }
     label { display: block; font-weight: 600; margin: 20px 0 6px; }
     .hint { color: var(--muted); font-size: 13px; font-weight: 400; margin: 4px 0 0; }
-    input[type=password], select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+    input[type=password], input[type=text], select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
     textarea { min-height: 110px; resize: vertical; }
     .check { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; }
     .check input { margin-top: 4px; }
@@ -24,12 +24,21 @@
   <h1>NewsAI</h1>
   <p class="lead">Rövid összefoglaló és pontozás hírcikkekhez, még mielőtt elolvasnád őket.</p>
 
-  <label for="apiKey">Anthropic API-kulcs</label>
-  <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
-  <p class="hint">A <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> oldalon hozhatsz létre egyet. Csak ezen a gépen tárolódik, és csak az Anthropic API felé megy ki.</p>
+  <label for="provider">AI-szolgáltató</label>
+  <select id="provider"></select>
+
+  <label for="apiKey">API-kulcs</label>
+  <input id="apiKey" type="password" autocomplete="off">
+  <p class="hint" id="keyHint"></p>
 
   <label for="model">Modell</label>
-  <select id="model"></select>
+  <input id="model" type="text" list="modelList" autocomplete="off">
+  <datalist id="modelList"></datalist>
+  <p class="hint">Válassz a listából, vagy írd be bármely modell nevét, amit az endpointod ismer.</p>
+
+  <label for="baseUrl">Saját endpoint (nem kötelező)</label>
+  <input id="baseUrl" type="text" autocomplete="off">
+  <p class="hint" id="baseUrlHint"></p>
 
   <label for="interests">Érdeklődési köreid</label>
   <textarea id="interests" placeholder="Pl.: magyar gazdaság, technológia és AI, Budapest közlekedés, tudomány. Nem érdekel: bulvár, celebek, sport."></textarea>
