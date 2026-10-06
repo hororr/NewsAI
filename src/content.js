@@ -153,7 +153,10 @@ const BADGE_CSS = `
   .newsai-high { background: #1a7f37; }
 `;
 
-const seenLinks = new Map(); // url -> [anchor elements]
+// url -> "pending" | "failed" | { score, reason }. Kept outside the page's DOM because
+// sites like Telex re-render their headlines and wipe anything inserted into them.
+const headlineScores = new Map();
+const badgeOf = new WeakMap(); // anchor -> its badge element
 let scanTimer = null;
 
 function canonicalUrl(href) {
@@ -176,7 +179,6 @@ function candidateLinks() {
   const domain = baseDomain(location.hostname);
   const found = [];
   for (const a of document.querySelectorAll("a[href]")) {
-    if (a.dataset.newsai) continue;
     const url = canonicalUrl(a.href);
     if (!url || url === here) continue;
     const u = new URL(url);
@@ -211,43 +213,73 @@ function badgeClass(score) {
   return score >= 7 ? "newsai-high" : score >= 4 ? "newsai-mid" : "newsai-low";
 }
 
-async function scanHeadlines(manual = false) {
-  const fresh = [];
-  for (const { a, url, title } of candidateLinks()) {
-    a.dataset.newsai = "1";
-    const badge = document.createElement("span");
+function renderBadge(badge, state) {
+  if (state === "pending") {
     badge.className = "newsai-badge newsai-pending";
     badge.textContent = "…";
+    badge.title = "NewsAI: pontozás folyamatban";
+  } else {
+    badge.className = `newsai-badge ${badgeClass(state.score)}`;
+    badge.textContent = state.score;
+    badge.title = `NewsAI: ${state.score}/10 – ${state.reason}`;
+  }
+}
+
+// Make sure every scored (or in-progress) headline shows its badge, putting it back
+// wherever the page has removed it.
+function placeBadge(a, url) {
+  const state = headlineScores.get(url);
+  if (!state || state === "failed") return;
+  let badge = badgeOf.get(a);
+  if (!badge || !badge.isConnected || !a.contains(badge)) {
+    badge = document.createElement("span");
+    badge.dataset.newsaiUrl = url;
+    badgeOf.set(a, badge);
     // Put the badge in front of the headline itself, not above a whole card.
     (a.querySelector("h1, h2, h3, h4, h5") || a).prepend(badge);
-    if (!seenLinks.has(url)) {
-      seenLinks.set(url, []);
+  }
+  renderBadge(badge, state);
+}
+
+function refreshBadges(urls) {
+  for (const badge of document.querySelectorAll(".newsai-badge[data-newsai-url]")) {
+    const url = badge.dataset.newsaiUrl;
+    if (!urls.has(url)) continue;
+    const state = headlineScores.get(url);
+    if (state && state !== "failed" && state !== "pending") renderBadge(badge, state);
+    else if (state === "failed") badge.remove();
+  }
+}
+
+async function scanHeadlines(manual = false) {
+  const fresh = [];
+  const links = candidateLinks();
+  for (const { a, url, title } of links) {
+    if (!headlineScores.has(url)) {
+      headlineScores.set(url, "pending");
       fresh.push({ url, title });
     }
-    seenLinks.get(url).push(badge);
+    placeBadge(a, url);
   }
   if (fresh.length === 0) {
-    if (seenLinks.size === 0 && manual) showStatus("NewsAI: ezen az oldalon nem találtam cikkcímeket.", "info");
+    if (links.length === 0 && manual) showStatus("NewsAI: ezen az oldalon nem találtam cikkcímeket.", "info");
     return;
   }
   showStatus(`NewsAI: ${fresh.length} cím pontozása…`, "busy");
   const response = await send({ type: "scoreHeadlines", items: fresh.slice(0, 120) });
   for (const { url } of fresh) {
     const result = response?.ok ? response.data.results[url] : null;
-    for (const badge of seenLinks.get(url) || []) {
-      if (result) {
-        badge.className = `newsai-badge ${badgeClass(result.score)}`;
-        badge.textContent = result.score;
-        badge.title = `NewsAI: ${result.score}/10 – ${result.reason}`;
-      } else {
-        badge.remove();
-      }
-    }
-    if (!result) seenLinks.delete(url);
+    headlineScores.set(url, result || "failed");
+  }
+  refreshBadges(new Set(fresh.map((f) => f.url)));
+  // Failed headlines get another chance on a scan a minute later, not straight away.
+  const failedUrls = fresh.map((f) => f.url).filter((url) => headlineScores.get(url) === "failed");
+  if (failedUrls.length) {
+    setTimeout(() => failedUrls.forEach((url) => headlineScores.get(url) === "failed" && headlineScores.delete(url)), 60000);
   }
   const scored = response?.ok ? Object.keys(response.data.results).length : 0;
   if (response?.ok && response.data.error) {
-    showStatus(`NewsAI: ${fresh.length - response.data.failed} cím pontozva, ${response.data.failed} nem sikerült (${response.data.error})`, "info");
+    showStatus(`NewsAI: ${scored} cím pontozva, ${response.data.failed} nem sikerült (${response.data.error})`, "info");
   } else if (response?.ok) showStatus(`NewsAI: ${scored} cím pontozva.`, "ok");
   else showStatus(`NewsAI hiba: ${response?.error || "ismeretlen hiba"}`, "error");
 }
@@ -266,7 +298,7 @@ function startHeadlineBadges(manual = false) {
   headlineObserver = new MutationObserver(() => {
     if (!contextAlive()) return stopHeadlineBadges();
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(() => scanHeadlines(), 1500);
+    scanTimer = setTimeout(() => scanHeadlines(), 300);
   });
   headlineObserver.observe(document.body, { childList: true, subtree: true });
 }
