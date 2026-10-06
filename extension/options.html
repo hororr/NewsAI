@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <title>NewsAI beállítások</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #fff; --fg: #1f2328; --muted: #57606a; --border: #d0d7de; --accent: #0969da; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d; --accent: #4493f8; } }
+    body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 640px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    p.lead { color: var(--muted); margin-top: 0; }
+    label { display: block; font-weight: 600; margin: 20px 0 6px; }
+    .hint { color: var(--muted); font-size: 13px; font-weight: 400; margin: 4px 0 0; }
+    input[type=password], select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+    textarea { min-height: 110px; resize: vertical; }
+    .check { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; }
+    .check input { margin-top: 4px; }
+    button { margin-top: 24px; padding: 8px 18px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: 600 14px system-ui, sans-serif; cursor: pointer; }
+    #status { margin-left: 12px; color: var(--muted); }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>NewsAI</h1>
+  <p class="lead">Rövid összefoglaló és pontozás hírcikkekhez, még mielőtt elolvasnád őket.</p>
+
+  <label for="apiKey">Anthropic API-kulcs</label>
+  <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
+  <p class="hint">A <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> oldalon hozhatsz létre egyet. Csak ezen a gépen tárolódik, és csak az Anthropic API felé megy ki.</p>
+
+  <label for="model">Modell</label>
+  <select id="model"></select>
+
+  <label for="interests">Érdeklődési köreid</label>
+  <textarea id="interests" placeholder="Pl.: magyar gazdaság, technológia és AI, Budapest közlekedés, tudomány. Nem érdekel: bulvár, celebek, sport."></textarea>
+  <p class="hint">Ez alapján pontozza a relevanciát. Írd le szabadon, mi érdekel és mi nem.</p>
+
+  <label for="sites">Híroldalak</label>
+  <textarea id="sites"></textarea>
+  <p class="hint">Soronként egy domain. Ezeken fut automatikusan; bármely más oldalon a bővítmény ikonjára kattintva kérhetsz összefoglalót.</p>
+
+  <label class="check"><input id="autoSummary" type="checkbox"> Cikkoldalon automatikusan mutassa az összefoglalót</label>
+  <label class="check"><input id="headlineBadges" type="checkbox"> Címlapon pontszám minden cikkcím mellett</label>
+
+  <button id="save">Mentés</button><span id="status"></span>
+
+  <script src="options.js"></script>
+</body>
+</html>
