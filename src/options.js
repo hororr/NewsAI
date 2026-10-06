@@ -19,7 +19,11 @@ function showProviderFields(id) {
   $("model").placeholder = info.defaultModel;
   $("modelList").innerHTML = info.models.map((m) => `<option value="${m}">`).join("");
   $("baseUrl").placeholder = info.defaultBaseUrl;
-  if (id === "openai") {
+  if (id === "openrouter") {
+    $("apiKey").placeholder = "sk-or-...";
+    $("keyHint").innerHTML = `Az OpenRouter-kulcsot az <a href="${info.keyUrl}" target="_blank">openrouter.ai</a> oldalon hozhatod létre. Egy kulccsal az OpenAI, Claude, Gemini, Llama és sok más modell is elérhető.`;
+    $("baseUrlHint").textContent = "Üresen a hivatalos OpenRouter címet használja. A modellnevek szolgáltató/modell alakúak, a teljes lista: openrouter.ai/models.";
+  } else if (id === "openai") {
     $("apiKey").placeholder = "sk-...";
     $("keyHint").innerHTML = `Az OpenAI-kulcsot a <a href="${info.keyUrl}" target="_blank">platform.openai.com</a> oldalon hozhatod létre. Saját endpointnál az ott kapott kulcsot add meg; helyi szervernél (pl. Ollama) üresen is hagyhatod.`;
     $("baseUrlHint").textContent = "Üresen az OpenAI-t használja. Más OpenAI-kompatibilis szolgáltatónál add meg a címét, pl. https://openrouter.ai/api/v1 vagy http://localhost:11434/v1 (Ollama).";
@@ -74,6 +78,9 @@ async function save() {
     openaiKey: settings.openaiKey,
     openaiModel: settings.openaiModel,
     openaiBaseUrl: settings.openaiBaseUrl,
+    openrouterKey: settings.openrouterKey,
+    openrouterModel: settings.openrouterModel,
+    openrouterBaseUrl: settings.openrouterBaseUrl,
     interests: $("interests").value,
     sites: $("sites").value,
     autoSummary: $("autoSummary").checked,

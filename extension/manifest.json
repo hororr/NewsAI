@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "NewsAI",
-  "version": "0.2.0",
-  "description": "Rövid összefoglaló és pontozás hírcikkekhez AI-val (Claude, OpenAI vagy saját endpoint), még olvasás előtt.",
+  "version": "0.3.0",
+  "description": "Rövid összefoglaló és pontozás hírcikkekhez AI-val (Claude, OpenAI, OpenRouter vagy saját endpoint), még olvasás előtt.",
   "permissions": [
     "storage"
   ],
   "host_permissions": [
     "https://api.anthropic.com/*",
-    "https://api.openai.com/*"
+    "https://api.openai.com/*",
+    "https://openrouter.ai/*"
   ],
   "background": {
     "service_worker": "background.js"

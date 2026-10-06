@@ -59,14 +59,31 @@ function parseJsonText(text, schema) {
   return result.data;
 }
 
-async function callOpenAI(provider, { system, user, schema }) {
-  const custom = Boolean(provider.baseUrl);
-  if (!provider.apiKey && !custom) throw new Error("Nincs megadva OpenAI API-kulcs. Add meg a bővítmény beállításaiban.");
+// Reasoning models (gpt-5 family, o-series) reject temperature and max_tokens and take
+// max_completion_tokens instead, which also has to cover their hidden reasoning tokens.
+function isReasoningModel(model) {
+  return /^(gpt-5|o\d)/.test(model.toLowerCase().replace(/^.*\//, ""));
+}
+
+function tokenParams(model, maxTokens) {
+  return isReasoningModel(model)
+    ? { max_completion_tokens: Math.max(maxTokens * 4, 8000) }
+    : { temperature: 0.3, max_tokens: maxTokens };
+}
+
+async function callOpenAI(provider, { system, user, schema, maxTokens }) {
+  const openrouter = provider.id === "openrouter";
+  const custom = Boolean(provider.baseUrl) && !openrouter;
+  if (!provider.apiKey && !custom) {
+    throw new Error(`Nincs megadva ${openrouter ? "OpenRouter" : "OpenAI"} API-kulcs. Add meg a bővítmény beállításaiban.`);
+  }
   const client = new OpenAI({
     // Local servers such as Ollama need no key, but the SDK requires a value.
     apiKey: provider.apiKey || "nincs-kulcs",
     baseURL: provider.baseUrl || undefined,
     dangerouslyAllowBrowser: true,
+    // OpenRouter shows the app name in its usage dashboard.
+    defaultHeaders: openrouter ? { "X-Title": "NewsAI" } : undefined,
   });
   const jsonSchema = strictJsonSchema(schema);
   const messages = [
@@ -79,6 +96,7 @@ async function callOpenAI(provider, { system, user, schema }) {
     completion = await client.chat.completions.create({
       model: provider.model,
       messages,
+      ...tokenParams(provider.model, maxTokens),
       response_format: { type: "json_schema", json_schema: { name: "answer", strict: true, schema: jsonSchema } },
     });
   } catch (error) {
@@ -91,6 +109,7 @@ async function callOpenAI(provider, { system, user, schema }) {
         { role: "system", content: `${system}\n\nVálaszolj kizárólag egy JSON objektummal, ami megfelel ennek a sémának:\n${JSON.stringify(jsonSchema)}` },
         { role: "user", content: user },
       ],
+      ...tokenParams(provider.model, maxTokens),
       response_format: { type: "json_object" },
     });
   }
@@ -103,7 +122,7 @@ async function callOpenAI(provider, { system, user, schema }) {
 }
 
 export async function callModel(provider, request) {
-  return provider.id === "openai" ? callOpenAI(provider, request) : callAnthropic(provider, request);
+  return provider.id === "anthropic" ? callAnthropic(provider, request) : callOpenAI(provider, request);
 }
 
 export function friendlyError(error) {

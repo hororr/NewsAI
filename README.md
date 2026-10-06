@@ -1,6 +1,6 @@
 # NewsAI
 
-Chrome-bővítmény, ami hírcikkekhez rövid összefoglalót és pontozást ad mesterséges intelligenciával (Claude, OpenAI vagy bármilyen OpenAI-kompatibilis saját endpoint), még mielőtt elolvasnád őket.
+Chrome-bővítmény, ami hírcikkekhez rövid összefoglalót és pontozást ad mesterséges intelligenciával (Claude, OpenAI, OpenRouter vagy bármilyen OpenAI-kompatibilis saját endpoint), még mielőtt elolvasnád őket.
 
 - **Cikkoldalon:** jobb felső sarokban 5-10 mondatos összefoglaló, pontszámok (érdekesség, relevancia neked, újdonság, kattintásvadászat) és egy verdikt: érdemes elolvasni / az összefoglaló elég / kihagyható.
 - **Címlapon:** minden cikkcím elé kerül egy 1-10-es pontszám-jelvény (zöld = érdemes, sárga = közepes, szürke = kihagyható). A jelvény fölé víve az egérmutatót egy rövid indoklás is látszik. A címlapi pontszám csak a cím alapján készül, a cikket nem tölti le.
@@ -19,9 +19,10 @@ Az eredmények el vannak tárolva a gépeden, így ugyanazért a cikkért nem fi
 
 - **AI-szolgáltató:**
   - *Anthropic (Claude):* kulcs a [console.anthropic.com](https://console.anthropic.com/settings/keys) oldalon. Alapmodell: Claude Haiku 4.5 (gyors és olcsó); Sonnet 5.5 vagy Opus 5.5 jobb minőséget ad, de többe kerül.
-  - *OpenAI vagy OpenAI-kompatibilis:* kulcs a [platform.openai.com](https://platform.openai.com/api-keys) oldalon. Alapmodell: gpt-5-mini.
+  - *OpenAI vagy OpenAI-kompatibilis:* kulcs a [platform.openai.com](https://platform.openai.com/api-keys) oldalon. Alapmodell: gpt-4.1. A listában a gpt-4.1, gpt-4o, gpt-5, gpt-5.1, gpt-5.2, gpt-5.6-luna, o3, o3-mini és o4-mini modellek (rövid és dátumos névvel is) szerepelnek. A gpt-5 és o-sorozatnál a bővítmény automatikusan `max_completion_tokens`-t küld `temperature` nélkül, a többinél `temperature`-t és `max_tokens`-t.
+  - *OpenRouter:* kulcs az [openrouter.ai](https://openrouter.ai/settings/keys) oldalon; egy kulccsal sok szolgáltató modellje elérhető. A modellnevek `szolgáltató/modell` alakúak (pl. `openai/gpt-4.1`, `anthropic/claude-sonnet-4.5`), a teljes lista: [openrouter.ai/models](https://openrouter.ai/models).
 - **Modell:** a listából választhatsz, vagy beírhatod bármely modell nevét, amit az endpointod ismer.
-- **Saját endpoint:** üresen a hivatalos API-t használja. Megadhatsz más címet, pl. `https://openrouter.ai/api/v1`, `http://localhost:11434/v1` (Ollama) vagy saját Anthropic-proxyt. Mentéskor a Chrome engedélyt kér az endpoint eléréséhez. Ha a szerver nem ismeri a JSON-sémás választ, a bővítmény automatikusan egyszerű JSON módra vált.
+- **Saját endpoint:** üresen a hivatalos API-t használja. Megadhatsz más címet, pl. `http://localhost:11434/v1` (Ollama) vagy saját Anthropic-proxyt. Mentéskor a Chrome engedélyt kér az endpoint eléréséhez. Ha a szerver nem ismeri a JSON-sémás választ, a bővítmény automatikusan egyszerű JSON módra vált.
 - A kulcsok, modellek és endpointok szolgáltatónként külön tárolódnak, így váltogathatsz köztük.
 - **Érdeklődési körök:** szabad szöveg arról, mi érdekel és mi nem. Ez alapján számol a relevancia és a címlapi pontszám.
 - **Híroldalak:** ezeken fut automatikusan (alapból index.hu, telex.hu, 444.hu, hvg.hu, 24.hu, portfolio.hu, origo.hu, magyarnemzet.hu, nepszava.hu).
