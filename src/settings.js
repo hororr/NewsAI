@@ -36,6 +36,7 @@ export const PROVIDERS = {
     defaultModel: "openai/gpt-4.1",
     defaultBaseUrl: "https://openrouter.ai/api/v1",
     models: [
+      "openrouter/auto",
       "openai/gpt-4.1", "openai/gpt-4.1-mini", "openai/gpt-4.1-nano",
       "openai/gpt-4o", "openai/gpt-4o-mini",
       "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
@@ -57,6 +58,7 @@ export const DEFAULTS = {
   openaiBaseUrl: "",
   openrouterModel: PROVIDERS.openrouter.defaultModel,
   openrouterBaseUrl: "",
+  openrouterCheapest: true,
   interests: "",
   sites: [
     "index.hu",
@@ -109,6 +111,7 @@ export function activeProvider(settings) {
     model: settings[`${id}Model`].trim() || PROVIDERS[id].defaultModel,
     baseUrl: (settings[`${id}BaseUrl`].trim() || (id === "openrouter" ? PROVIDERS.openrouter.defaultBaseUrl : "")).replace(/\/+$/, ""),
     apiKey: settings[`${id}Key`].trim(),
+    cheapest: id === "openrouter" && settings.openrouterCheapest,
   };
 }
 

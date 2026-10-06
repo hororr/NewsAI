@@ -19,6 +19,7 @@ function showProviderFields(id) {
   $("model").placeholder = info.defaultModel;
   $("modelList").innerHTML = info.models.map((m) => `<option value="${m}">`).join("");
   $("baseUrl").placeholder = info.defaultBaseUrl;
+  $("openrouterOptions").hidden = id !== "openrouter";
   if (id === "openrouter") {
     $("apiKey").placeholder = "sk-or-...";
     $("keyHint").innerHTML = `Az OpenRouter-kulcsot az <a href="${info.keyUrl}" target="_blank">openrouter.ai</a> oldalon hozhatod létre. Egy kulccsal az OpenAI, Claude, Gemini, Llama és sok más modell is elérhető.`;
@@ -42,6 +43,7 @@ async function load() {
     .join("");
   $("provider").value = settings.provider;
   showProviderFields(settings.provider);
+  $("openrouterCheapest").checked = settings.openrouterCheapest;
   $("interests").value = settings.interests;
   $("sites").value = settings.sites;
   $("autoSummary").checked = settings.autoSummary;
@@ -81,6 +83,7 @@ async function save() {
     openrouterKey: settings.openrouterKey,
     openrouterModel: settings.openrouterModel,
     openrouterBaseUrl: settings.openrouterBaseUrl,
+    openrouterCheapest: $("openrouterCheapest").checked,
     interests: $("interests").value,
     sites: $("sites").value,
     autoSummary: $("autoSummary").checked,

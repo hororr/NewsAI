@@ -40,6 +40,11 @@
   <input id="baseUrl" type="text" autocomplete="off">
   <p class="hint" id="baseUrlHint"></p>
 
+  <div id="openrouterOptions" hidden>
+    <label class="check"><input id="openrouterCheapest" type="checkbox"> Mindig a legolcsóbb szolgáltatótól kérje a modellt</label>
+    <p class="hint">Ugyanazt a modellt több cég is futtatja, eltérő áron. Bekapcsolva mindig a legolcsóbbat választja (ez az OpenRouter „:floor” beállítása). Ha a modellt is az OpenRouterre bíznád, válaszd az <code>openrouter/auto</code> modellt.</p>
+  </div>
+
   <label for="interests">Érdeklődési köreid</label>
   <textarea id="interests" placeholder="Pl.: magyar gazdaság, technológia és AI, Budapest közlekedés, tudomány. Nem érdekel: bulvár, celebek, sport."></textarea>
   <p class="hint">Ez alapján pontozza a relevanciát. Írd le szabadon, mi érdekel és mi nem.</p>

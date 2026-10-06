@@ -86,6 +86,9 @@ async function callOpenAI(provider, { system, user, schema, maxTokens }) {
     defaultHeaders: openrouter ? { "X-Title": "NewsAI" } : undefined,
   });
   const jsonSchema = strictJsonSchema(schema);
+  // OpenRouter: among the providers serving the chosen model, use the cheapest
+  // (the same as the model's ":floor" variant).
+  const routing = provider.cheapest ? { provider: { sort: "price" } } : {};
   const messages = [
     { role: "system", content: system },
     { role: "user", content: user },
@@ -97,6 +100,7 @@ async function callOpenAI(provider, { system, user, schema, maxTokens }) {
       model: provider.model,
       messages,
       ...tokenParams(provider.model, maxTokens),
+      ...routing,
       response_format: { type: "json_schema", json_schema: { name: "answer", strict: true, schema: jsonSchema } },
     });
   } catch (error) {
@@ -110,6 +114,7 @@ async function callOpenAI(provider, { system, user, schema, maxTokens }) {
         { role: "user", content: user },
       ],
       ...tokenParams(provider.model, maxTokens),
+      ...routing,
       response_format: { type: "json_object" },
     });
   }
