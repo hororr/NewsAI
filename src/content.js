@@ -146,7 +146,8 @@ async function summarizeArticle(article) {
 const BADGE_CSS = `
   .newsai-badge { display: inline-block !important; min-width: 1.6em; margin-right: .4em; padding: 0 .35em; border-radius: 4px;
     font: 700 12px/1.6 system-ui, sans-serif !important; color: #fff !important; text-align: center; vertical-align: middle;
-    text-decoration: none !important; letter-spacing: 0; }
+    text-decoration: none !important; letter-spacing: 0; height: auto !important; flex: none !important;
+    align-self: flex-start !important; box-sizing: content-box; }
   .newsai-pending { background: #8c959f; opacity: .5; }
   .newsai-low { background: #8c959f; }
   .newsai-mid { background: #bf8700; }
@@ -189,9 +190,34 @@ function candidateLinks() {
     if (!title) continue;
     const rect = a.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
-    found.push({ a, url, title });
+    found.push({ a, url, title, strong: looksLikeHeadline(a) });
   }
-  return found;
+  // When an article has a headline-looking link (heading or bold), skip its plain links
+  // such as the lead paragraph; sites with only plain links keep them all.
+  const hasStrong = new Set(found.filter((f) => f.strong).map((f) => f.url));
+  return found.filter((f) => f.strong || !hasStrong.has(f.url));
+}
+
+// Cards often link the image, the headline and the lead paragraph separately to the
+// same article. Headlines sit in a heading or are set in bold, leads are not.
+function headlineTextElement(a) {
+  return [a, ...a.querySelectorAll("*")].find(
+    (el) => !el.classList.contains("newsai-badge") && el.childElementCount === 0 && el.textContent.trim().length >= 25,
+  );
+}
+
+function looksLikeHeadline(a) {
+  if (a.querySelector("h1, h2, h3, h4, h5, h6") || a.closest("h1, h2, h3, h4, h5, h6")) return true;
+  const textEl = headlineTextElement(a) || a;
+  return parseInt(getComputedStyle(textEl).fontWeight, 10) >= 600;
+}
+
+// Where the badge goes: right in front of the headline text, not above a whole card.
+function badgeTarget(a) {
+  const heading = a.querySelector("h1, h2, h3, h4, h5, h6");
+  if (heading) return heading;
+  const textEl = headlineTextElement(a);
+  return textEl && textEl !== a ? textEl : a;
 }
 
 // Card-style links often wrap the headline together with a lead paragraph; prefer the
@@ -235,8 +261,7 @@ function placeBadge(a, url) {
     badge = document.createElement("span");
     badge.dataset.newsaiUrl = url;
     badgeOf.set(a, badge);
-    // Put the badge in front of the headline itself, not above a whole card.
-    (a.querySelector("h1, h2, h3, h4, h5") || a).prepend(badge);
+    badgeTarget(a).prepend(badge);
   }
   renderBadge(badge, state);
 }
@@ -265,23 +290,39 @@ async function scanHeadlines(manual = false) {
     if (links.length === 0 && manual) showStatus("NewsAI: ezen az oldalon nem találtam cikkcímeket.", "info");
     return;
   }
+  // Send small batches a few at a time, so badges fill in as answers arrive instead
+  // of waiting for the slowest one.
+  const batches = [];
+  for (let i = 0; i < fresh.length; i += 15) batches.push(fresh.slice(i, i + 15));
+  let scored = 0;
+  let failed = 0;
+  let lastError = null;
   showStatus(`NewsAI: ${fresh.length} cím pontozása…`, "busy");
-  const response = await send({ type: "scoreHeadlines", items: fresh.slice(0, 120) });
-  for (const { url } of fresh) {
-    const result = response?.ok ? response.data.results[url] : null;
-    headlineScores.set(url, result || "failed");
-  }
-  refreshBadges(new Set(fresh.map((f) => f.url)));
+  const runBatch = async (batch) => {
+    const response = await send({ type: "scoreHeadlines", items: batch });
+    for (const { url } of batch) {
+      const result = response?.ok ? response.data.results[url] : null;
+      headlineScores.set(url, result || "failed");
+      if (result) scored++;
+      else failed++;
+    }
+    if (!response?.ok) lastError = response?.error;
+    else if (response.data.error) lastError = response.data.error;
+    refreshBadges(new Set(batch.map((f) => f.url)));
+    if (failed + scored < fresh.length) showStatus(`NewsAI: ${scored}/${fresh.length} cím pontozva…`, "busy");
+  };
+  const queue = [...batches];
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+    while (queue.length) await runBatch(queue.shift());
+  }));
   // Failed headlines get another chance on a scan a minute later, not straight away.
   const failedUrls = fresh.map((f) => f.url).filter((url) => headlineScores.get(url) === "failed");
   if (failedUrls.length) {
     setTimeout(() => failedUrls.forEach((url) => headlineScores.get(url) === "failed" && headlineScores.delete(url)), 60000);
   }
-  const scored = response?.ok ? Object.keys(response.data.results).length : 0;
-  if (response?.ok && response.data.error) {
-    showStatus(`NewsAI: ${scored} cím pontozva, ${response.data.failed} nem sikerült (${response.data.error})`, "info");
-  } else if (response?.ok) showStatus(`NewsAI: ${scored} cím pontozva.`, "ok");
-  else showStatus(`NewsAI hiba: ${response?.error || "ismeretlen hiba"}`, "error");
+  if (scored === 0) showStatus(`NewsAI hiba: ${lastError || "ismeretlen hiba"}`, "error");
+  else if (failed) showStatus(`NewsAI: ${scored} cím pontozva, ${failed} nem sikerült${lastError ? ` (${lastError})` : ""}`, "info");
+  else showStatus(`NewsAI: ${scored} cím pontozva.`, "ok");
 }
 
 let headlineObserver = null;
