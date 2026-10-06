@@ -1,4 +1,4 @@
-import { Readability, isProbablyReaderable } from "@mozilla/readability";
+import { Readability } from "@mozilla/readability";
 import { getSettings, matchesSite } from "./settings.js";
 
 const MIN_ARTICLE_CHARS = 1200;
@@ -15,7 +15,6 @@ const SCORE_LABELS = {
 };
 
 let panelHost = null;
-let articleStarted = false;
 
 function send(message) {
   return new Promise((resolve) => {
@@ -34,7 +33,6 @@ function extractArticle() {
 }
 
 function looksLikeArticle() {
-  if (!isProbablyReaderable(document)) return null;
   const article = extractArticle();
   return article && article.text.length >= MIN_ARTICLE_CHARS ? article : null;
 }
@@ -123,12 +121,12 @@ function renderSummary(root, data) {
 }
 
 async function summarizeArticle(article) {
-  articleStarted = true;
   const root = ensurePanel();
   const body = root.querySelector(".body");
   body.innerHTML = `<div class="muted">Összefoglaló készül…</div>`;
-  const response = await send({ type: "summarize", url: canonicalUrl(location.href), title: article.title, text: article.text });
-  if (!panelHost) return;
+  const url = canonicalUrl(location.href);
+  const response = await send({ type: "summarize", url, title: article.title, text: article.text });
+  if (!panelHost || canonicalUrl(location.href) !== url) return;
   if (response?.ok) renderSummary(root, response.data);
   else body.innerHTML = `<div class="error">${escapeHtml(response?.error || "Ismeretlen hiba")}</div>
     <p><a data-act="options">Beállítások megnyitása</a></p>`;
@@ -176,8 +174,8 @@ function candidateLinks() {
     if (!/^https?:$/.test(u.protocol) || baseDomain(u.hostname) !== domain) continue;
     // Article URLs are long and usually carry a slug or an id.
     if (u.pathname.length < 15 || !/[-_]|\d{4,}/.test(u.pathname)) continue;
-    const title = (a.innerText || "").replace(/\s+/g, " ").trim();
-    if (title.length < 25 || title.length > 220) continue;
+    const title = linkTitle(a);
+    if (!title) continue;
     const rect = a.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
     found.push({ a, url, title });
@@ -185,25 +183,45 @@ function candidateLinks() {
   return found;
 }
 
+// Card-style links often wrap the headline together with a lead paragraph; prefer the
+// heading inside, then the first line of text.
+function linkTitle(a) {
+  const clean = (t) => (t || "").replace(/\s+/g, " ").trim();
+  const fits = (t) => t.length >= 25 && t.length <= 220;
+  const heading = clean(a.querySelector("h1, h2, h3, h4, h5, [class*='title'], [class*='Title']")?.innerText);
+  if (fits(heading)) return heading;
+  const text = clean(a.innerText);
+  if (fits(text)) return text;
+  const firstLine = (a.innerText || "").split("\n").map(clean).find((line) => line.length >= 25);
+  if (firstLine && fits(firstLine)) return firstLine;
+  const label = clean(a.getAttribute("aria-label") || a.getAttribute("title"));
+  return fits(label) ? label : null;
+}
+
 function badgeClass(score) {
   return score >= 7 ? "newsai-high" : score >= 4 ? "newsai-mid" : "newsai-low";
 }
 
-async function scanHeadlines() {
+async function scanHeadlines(manual = false) {
   const fresh = [];
   for (const { a, url, title } of candidateLinks()) {
     a.dataset.newsai = "1";
     const badge = document.createElement("span");
     badge.className = "newsai-badge newsai-pending";
     badge.textContent = "…";
-    a.prepend(badge);
+    // Put the badge in front of the headline itself, not above a whole card.
+    (a.querySelector("h1, h2, h3, h4, h5") || a).prepend(badge);
     if (!seenLinks.has(url)) {
       seenLinks.set(url, []);
       fresh.push({ url, title });
     }
     seenLinks.get(url).push(badge);
   }
-  if (fresh.length === 0) return;
+  if (fresh.length === 0) {
+    if (seenLinks.size === 0 && manual) showStatus("NewsAI: ezen az oldalon nem találtam cikkcímeket.", "info");
+    return;
+  }
+  showStatus(`NewsAI: ${fresh.length} cím pontozása…`, "busy");
   const response = await send({ type: "scoreHeadlines", items: fresh.slice(0, 120) });
   for (const { url } of fresh) {
     const result = response?.ok ? response.data[url] : null;
@@ -218,42 +236,120 @@ async function scanHeadlines() {
     }
     if (!result) seenLinks.delete(url);
   }
-  if (response && !response.ok) console.warn("NewsAI:", response.error);
+  if (response?.ok) showStatus(`NewsAI: ${fresh.length} cím pontozva.`, "ok");
+  else showStatus(`NewsAI hiba: ${response?.error || "ismeretlen hiba"}`, "error");
 }
 
-function startHeadlineBadges() {
-  const style = document.createElement("style");
-  style.textContent = BADGE_CSS;
-  document.head.appendChild(style);
-  scanHeadlines();
-  new MutationObserver(() => {
+let headlineObserver = null;
+
+function startHeadlineBadges(manual = false) {
+  if (!document.getElementById("newsai-badge-css")) {
+    const style = document.createElement("style");
+    style.id = "newsai-badge-css";
+    style.textContent = BADGE_CSS;
+    document.head.appendChild(style);
+  }
+  scanHeadlines(manual);
+  if (headlineObserver) return;
+  headlineObserver = new MutationObserver(() => {
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(scanHeadlines, 1500);
-  }).observe(document.body, { childList: true, subtree: true });
+    scanTimer = setTimeout(() => scanHeadlines(), 1500);
+  });
+  headlineObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+function stopHeadlineBadges() {
+  headlineObserver?.disconnect();
+  headlineObserver = null;
+  clearTimeout(scanTimer);
+}
+
+// ---------- Status toast ----------
+
+let statusHost = null;
+let statusTimer = null;
+
+function showStatus(text, kind) {
+  if (!statusHost) {
+    statusHost = document.createElement("newsai-status");
+    statusHost.attachShadow({ mode: "open" }).innerHTML = `<style>
+      :host { all: initial; }
+      div { position: fixed; bottom: 16px; right: 16px; z-index: 2147483647; max-width: 360px; padding: 8px 12px; border-radius: 8px;
+        font: 13px/1.4 system-ui, sans-serif; color: #fff; background: #24292f; box-shadow: 0 4px 16px rgba(0,0,0,.25); cursor: pointer; }
+      div.error { background: #cf222e; }
+      div.ok { background: #1a7f37; }
+    </style><div title="Kattints a bezáráshoz"></div>`;
+    statusHost.shadowRoot.querySelector("div").addEventListener("click", () => {
+      statusHost.remove();
+      statusHost = null;
+    });
+    document.documentElement.appendChild(statusHost);
+  }
+  const box = statusHost.shadowRoot.querySelector("div");
+  box.className = kind;
+  box.textContent = text;
+  clearTimeout(statusTimer);
+  // Errors stay until clicked; everything else fades on its own.
+  if (kind !== "error" && kind !== "busy") {
+    statusTimer = setTimeout(() => {
+      statusHost?.remove();
+      statusHost = null;
+    }, 4000);
+  }
 }
 
 // ---------- Entry points ----------
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type !== "summarizeNow") return;
-  const article = extractArticle();
-  if (article && article.text.length > 200) summarizeArticle(article);
-  else {
-    const root = ensurePanel();
-    root.querySelector(".body").innerHTML = `<div class="muted">Ezen az oldalon nem találtam cikkszöveget.</div>`;
-  }
-});
+function isArticlePath(path) {
+  // Front and section pages have short paths; article pages carry a slug or an id.
+  return path.length >= 15 && /[-_]|\d{4,}/.test(path);
+}
 
-(async function init() {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Sites built as single-page apps (such as Telex) render the article after load and
+// switch pages without reloading, so look for the text a few times.
+async function waitForArticle(url) {
+  for (let i = 0; i < 6; i++) {
+    if (location.href !== url) return null;
+    const article = looksLikeArticle();
+    if (article) return article;
+    await sleep(1000);
+  }
+  return null;
+}
+
+async function route() {
   const settings = await getSettings();
   if (!matchesSite(location.hostname, settings)) return;
-  // Front and section pages have short paths; article pages carry a slug or an id.
-  const path = location.pathname;
-  const articlePath = path.length >= 15 && /[-_]|\d{4,}/.test(path);
-  const article = articlePath ? looksLikeArticle() : null;
+  const url = location.href;
+  const article = isArticlePath(location.pathname) ? await waitForArticle(url) : null;
+  if (location.href !== url) return;
   if (article) {
-    if (settings.autoSummary && !articleStarted) summarizeArticle(article);
+    stopHeadlineBadges();
+    if (settings.autoSummary) summarizeArticle(article);
   } else if (settings.headlineBadges) {
     startHeadlineBadges();
   }
-})();
+}
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type !== "summarizeNow") return;
+  const article = extractArticle();
+  if (isArticlePath(location.pathname) && article && article.text.length > 200) {
+    summarizeArticle(article);
+  } else {
+    startHeadlineBadges(true);
+  }
+});
+
+let lastUrl = location.href;
+setInterval(() => {
+  if (location.href === lastUrl) return;
+  lastUrl = location.href;
+  panelHost?.remove();
+  panelHost = null;
+  route();
+}, 1000);
+
+route();
