@@ -13,7 +13,7 @@ Az eredmények el vannak tárolva a gépeden, így ugyanazért a cikkért nem fi
 1. Töltsd le a repót (Code → Download ZIP), és csomagold ki.
 2. Chrome-ban nyisd meg a `chrome://extensions` oldalt, és kapcsold be jobb fent a **Fejlesztői módot**.
 3. **Kicsomagolt bővítmény betöltése** → válaszd ki az `extension` mappát.
-4. Megnyílik a beállítások oldal: válaszd ki a szolgáltatót, add meg az API-kulcsodat és az érdeklődési köreidet.
+4. Megnyílik a beállítások oldal. Alapból az OpenRouter ingyenes modelljei vannak beállítva, így elég megadni egy OpenRouter API-kulcsot ([openrouter.ai/settings/keys](https://openrouter.ai/settings/keys)) és menteni. Az érdeklődési köreidet is érdemes beírni; más szolgáltatót is választhatsz.
 
 ## Beállítások
 

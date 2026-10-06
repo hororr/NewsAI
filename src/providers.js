@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import OpenAI from "openai";
 import * as z from "zod/v4";
+import { isFreeModel } from "./settings.js";
 
 // Both providers take the same request: a system prompt, one user message and a zod
 // schema for the JSON answer. Each returns the parsed object or throws.
@@ -66,6 +67,9 @@ function isReasoningModel(model) {
 }
 
 function tokenParams(model, maxTokens) {
+  // The free router may pick a reasoning model; a token cap would cut it off, and
+  // free requests cost nothing, so leave the limits to the model.
+  if (isFreeModel(model)) return {};
   return isReasoningModel(model)
     ? { max_completion_tokens: Math.max(maxTokens * 4, 8000) }
     : { temperature: 0.3, max_tokens: maxTokens };
@@ -94,6 +98,20 @@ async function callOpenAI(provider, { system, user, schema, maxTokens }) {
     { role: "user", content: user },
   ];
 
+  // The free router picks a different model each time, so a malformed answer is
+  // worth another try.
+  const attempts = openrouter && isFreeModel(provider.model) ? 3 : 1;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await requestJson(client, provider, { system, schema, messages, maxTokens, jsonSchema, routing });
+    } catch (error) {
+      if (attempt >= attempts || error instanceof OpenAI.APIError) throw error;
+    }
+  }
+}
+
+async function requestJson(client, provider, { system, schema, messages, maxTokens, jsonSchema, routing }) {
+  const user = messages[1].content;
   let completion;
   try {
     completion = await client.chat.completions.create({
@@ -106,7 +124,12 @@ async function callOpenAI(provider, { system, user, schema, maxTokens }) {
   } catch (error) {
     // Many OpenAI-compatible servers only know the older JSON mode; retry with the
     // schema spelled out in the prompt instead.
-    if (!(error instanceof OpenAI.BadRequestError || error instanceof OpenAI.UnprocessableEntityError)) throw error;
+    // OpenRouter answers 404 when no model behind the request supports json_schema.
+    const unsupported =
+      error instanceof OpenAI.BadRequestError ||
+      error instanceof OpenAI.UnprocessableEntityError ||
+      (provider.id === "openrouter" && error instanceof OpenAI.NotFoundError);
+    if (!unsupported) throw error;
     completion = await client.chat.completions.create({
       model: provider.model,
       messages: [

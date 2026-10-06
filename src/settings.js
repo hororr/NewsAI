@@ -32,7 +32,7 @@ export const PROVIDERS = {
     keyUrl: "https://platform.openai.com/api-keys",
   },
   openrouter: {
-    label: "OpenRouter (sok modell egy kulccsal)",
+    label: "OpenRouter (ingyenes modellek is, egy kulccsal)",
     defaultModel: "openrouter/free",
     defaultBaseUrl: "https://openrouter.ai/api/v1",
     models: [
@@ -52,7 +52,7 @@ export const PROVIDERS = {
 };
 
 export const DEFAULTS = {
-  provider: "anthropic",
+  provider: "openrouter",
   anthropicModel: PROVIDERS.anthropic.defaultModel,
   anthropicBaseUrl: "",
   openaiModel: PROVIDERS.openai.defaultModel,
@@ -79,7 +79,7 @@ export const DEFAULTS = {
 const KEY_FIELDS = ["anthropicKey", "openaiKey", "openrouterKey"];
 
 export async function getSettings() {
-  const synced = await chrome.storage.sync.get({ ...DEFAULTS, model: null });
+  const synced = await chrome.storage.sync.get({ ...DEFAULTS, provider: null, model: null });
   const local = await chrome.storage.local.get([...KEY_FIELDS, "apiKey"]);
   const settings = { ...DEFAULTS, ...synced };
   // Settings saved by version 0.1 used a single model and apiKey for Claude.
@@ -88,6 +88,8 @@ export async function getSettings() {
   settings.anthropicKey = local.anthropicKey ?? local.apiKey ?? "";
   settings.openaiKey = local.openaiKey ?? "";
   settings.openrouterKey = local.openrouterKey ?? "";
+  // Before OpenRouter became the default, a missing provider meant Claude.
+  if (!synced.provider) settings.provider = settings.anthropicKey && !settings.openrouterKey ? "anthropic" : DEFAULTS.provider;
   return settings;
 }
 
@@ -106,7 +108,7 @@ export async function saveSettings(values) {
 
 // The provider-specific view of the settings: which endpoint, key and model to call.
 export function activeProvider(settings) {
-  const id = settings.provider in PROVIDERS ? settings.provider : "anthropic";
+  const id = settings.provider in PROVIDERS ? settings.provider : DEFAULTS.provider;
   return {
     id,
     model: settings[`${id}Model`].trim() || PROVIDERS[id].defaultModel,

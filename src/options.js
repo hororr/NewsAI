@@ -38,8 +38,8 @@ function showProviderFields(id) {
 
 async function load() {
   settings = await getSettings();
-  $("provider").innerHTML = Object.entries(PROVIDERS)
-    .map(([id, p]) => `<option value="${id}">${p.label}</option>`)
+  $("provider").innerHTML = ["openrouter", "anthropic", "openai"]
+    .map((id) => `<option value="${id}">${PROVIDERS[id].label}</option>`)
     .join("");
   $("provider").value = settings.provider;
   showProviderFields(settings.provider);
