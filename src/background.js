@@ -80,26 +80,36 @@ async function scoreHeadlines({ items }) {
     if (cached) results[item.url] = cached;
     else missing.push(item);
   }
-  if (missing.length === 0) return results;
+  if (missing.length === 0) return { results, failed: 0, error: null };
 
   const system = [
     "Egy hírportál címlapjának címeit pontozod egy elfoglalt olvasónak, hogy lássa, melyik cikket érdemes megnyitni.",
     "Minden címhez adj egy 1-10 közötti egész pontszámot (score): mennyire érdekes, fontos és releváns az olvasónak. Vond le a pontból, ha a cím kattintásvadásznak tűnik.",
-    "reason: legfeljebb 12 szavas magyar indoklás.",
+    "reason: legfeljebb 8 szavas magyar indoklás.",
     "Minden kapott id-hez pontosan egy elemet adj vissza.",
     interestsBlock(settings),
   ].join("\n\n");
 
-  // Keep requests small enough to answer quickly and fully.
-  for (let i = 0; i < missing.length; i += 40) {
-    const chunk = missing.slice(i, i + 40);
+  // Small batches keep each answer short, so free models with low output limits can
+  // finish it. A failed batch does not throw away the others.
+  let failed = 0;
+  let lastError = null;
+  for (let i = 0; i < missing.length; i += 15) {
+    const chunk = missing.slice(i, i + 15);
     const list = chunk.map((item, idx) => `${idx}: ${item.title}`).join("\n");
-    const output = await callModel(provider, {
-      system,
-      user: `Címek:\n${list}`,
-      schema: HeadlinesSchema,
-      maxTokens: 4000,
-    });
+    let output;
+    try {
+      output = await callModel(provider, {
+        system,
+        user: `Címek:\n${list}`,
+        schema: HeadlinesSchema,
+        maxTokens: 2000,
+      });
+    } catch (error) {
+      failed += chunk.length;
+      lastError = error;
+      continue;
+    }
     for (const entry of output.items) {
       const item = chunk[entry.id];
       if (!item) continue;
@@ -108,7 +118,8 @@ async function scoreHeadlines({ items }) {
       await cacheSet(cachePrefix + item.url, value);
     }
   }
-  return results;
+  if (lastError && Object.keys(results).length === 0) throw lastError;
+  return { results, failed, error: lastError ? friendlyError(lastError) : null };
 }
 
 async function cacheGet(key) {

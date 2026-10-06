@@ -45,19 +45,61 @@ function strictJsonSchema(schema) {
   return json;
 }
 
-function parseJsonText(text, schema) {
-  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  let value;
-  try {
-    value = JSON.parse(start >= 0 ? cleaned.slice(start, end + 1) : cleaned);
-  } catch {
-    throw new Error("A modell nem érvényes JSON-t adott vissza. Próbálj másik modellt.");
+// Coerce "7" to 7 and the like; some free models quote their numbers.
+function coerceNumbers(value) {
+  if (Array.isArray(value)) return value.map(coerceNumbers);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, coerceNumbers(v)]));
   }
-  const result = schema.safeParse(value);
-  if (!result.success) throw new Error("A modell válasza nem a várt formátumú. Próbálj másik modellt.");
-  return result.data;
+  if (typeof value === "string" && /^\s*-?\d+(\.\d+)?\s*$/.test(value)) return Number(value);
+  return value;
+}
+
+// Every balanced {...} block in the text, longest first.
+function jsonCandidates(text) {
+  const found = [];
+  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
+    let depth = 0;
+    let inString = false;
+    for (let i = start; i < text.length; i++) {
+      const c = text[i];
+      if (inString) {
+        if (c === "\\") i++;
+        else if (c === '"') inString = false;
+      } else if (c === '"') inString = true;
+      else if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) {
+        found.push(text.slice(start, i + 1));
+        break;
+      }
+    }
+  }
+  return found.sort((x, y) => y.length - x.length);
+}
+
+// Models in JSON mode (especially free ones) wrap the answer in reasoning, prose or
+// code fences; dig the object out and validate it.
+function parseJsonText(text, schema) {
+  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```(?:json)?/gi, "");
+  let sawJson = false;
+  for (const candidate of jsonCandidates(cleaned)) {
+    let value;
+    try {
+      value = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    sawJson = true;
+    const result = schema.safeParse(value);
+    if (result.success) return result.data;
+    const coerced = schema.safeParse(coerceNumbers(value));
+    if (coerced.success) return coerced.data;
+  }
+  throw new Error(
+    sawJson
+      ? "A modell válasza nem a várt formátumú. Próbálj másik modellt."
+      : "A modell nem érvényes JSON-t adott vissza. Próbálj másik modellt.",
+  );
 }
 
 // Reasoning models (gpt-5 family, o-series) reject temperature and max_tokens and take

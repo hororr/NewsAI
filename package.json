@@ -1,6 +1,6 @@
 {
   "name": "newsai",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Chrome-bővítmény: rövid összefoglaló és pontozás hírcikkekhez a Claude API-val",
   "scripts": {

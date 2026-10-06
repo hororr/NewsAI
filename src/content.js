@@ -16,7 +16,16 @@ const SCORE_LABELS = {
 
 let panelHost = null;
 
+const RELOAD_HINT = "A bővítmény frissült. Töltsd újra az oldalt (F5).";
+
+// After the extension is reloaded or updated, scripts left in already open tabs lose
+// their connection to it and every chrome.* call throws.
+function contextAlive() {
+  return Boolean(globalThis.chrome?.runtime?.id);
+}
+
 function send(message) {
+  if (!contextAlive()) return Promise.resolve({ ok: false, error: RELOAD_HINT });
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {
       if (chrome.runtime.lastError) resolve({ ok: false, error: chrome.runtime.lastError.message });
@@ -224,7 +233,7 @@ async function scanHeadlines(manual = false) {
   showStatus(`NewsAI: ${fresh.length} cím pontozása…`, "busy");
   const response = await send({ type: "scoreHeadlines", items: fresh.slice(0, 120) });
   for (const { url } of fresh) {
-    const result = response?.ok ? response.data[url] : null;
+    const result = response?.ok ? response.data.results[url] : null;
     for (const badge of seenLinks.get(url) || []) {
       if (result) {
         badge.className = `newsai-badge ${badgeClass(result.score)}`;
@@ -236,7 +245,10 @@ async function scanHeadlines(manual = false) {
     }
     if (!result) seenLinks.delete(url);
   }
-  if (response?.ok) showStatus(`NewsAI: ${fresh.length} cím pontozva.`, "ok");
+  const scored = response?.ok ? Object.keys(response.data.results).length : 0;
+  if (response?.ok && response.data.error) {
+    showStatus(`NewsAI: ${fresh.length - response.data.failed} cím pontozva, ${response.data.failed} nem sikerült (${response.data.error})`, "info");
+  } else if (response?.ok) showStatus(`NewsAI: ${scored} cím pontozva.`, "ok");
   else showStatus(`NewsAI hiba: ${response?.error || "ismeretlen hiba"}`, "error");
 }
 
@@ -252,6 +264,7 @@ function startHeadlineBadges(manual = false) {
   scanHeadlines(manual);
   if (headlineObserver) return;
   headlineObserver = new MutationObserver(() => {
+    if (!contextAlive()) return stopHeadlineBadges();
     clearTimeout(scanTimer);
     scanTimer = setTimeout(() => scanHeadlines(), 1500);
   });
@@ -343,13 +356,27 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 });
 
+async function safeRoute() {
+  try {
+    await route();
+  } catch (error) {
+    if (!contextAlive()) return;
+    showStatus(`NewsAI hiba: ${error?.message || error}`, "error");
+  }
+}
+
 let lastUrl = location.href;
-setInterval(() => {
+const urlWatcher = setInterval(() => {
+  if (!contextAlive()) {
+    clearInterval(urlWatcher);
+    stopHeadlineBadges();
+    return;
+  }
   if (location.href === lastUrl) return;
   lastUrl = location.href;
   panelHost?.remove();
   panelHost = null;
-  route();
+  safeRoute();
 }, 1000);
 
-route();
+safeRoute();
